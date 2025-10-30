@@ -3,211 +3,214 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ASV KKI 2025 - Monitoring System</title>
+  <title>Aquanova - Compact Fullscreen</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Socket.io -->
+  <script src="/socket.io/socket.io.js"></script>
+
   <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{
-      font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
-      background:#0f172a;color:#fff;padding:20px;
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", sans-serif; color: #e2e8f0; }
+    body {
+      background: #0f172a;
+      overflow: hidden;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 60px 1fr 25px;
+      grid-gap: 6px;
     }
-    .container{max-width:1200px;margin:0 auto}
-    .header{
-      text-align:center;margin-bottom:30px;padding:20px;
-      background:#1e293b;border-radius:10px;
+    header {
+      background: #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: bold;
+      color: #93c5fd;
+      position: relative;
     }
-    .dashboard{
-      display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;
+    #status {
+      position: absolute;
+      right: 15px;
+      top: 18px;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
-    .panel{
-      background:#1e293b;padding:20px;border-radius:10px;border:1px solid #334155;
+    #status span {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: gray;
     }
-    .telemetry-grid{
-      display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px;
+    .main {
+      display: grid;
+      grid-template-columns: 1.3fr 0.7fr;
+      gap: 10px;
+      padding: 10px;
     }
-    .telemetry-item{background:#334155;padding:15px;border-radius:8px}
-    .telemetry-value{font-size:1.5em;font-weight:bold;color:#60a5fa}
-    .camera-feed{display:flex;justify-content:center;align-items:center}
-    .camera-box{text-align:center;width:100%}
-    .camera-image{
-      width:100%;max-width:800px;height:500px;background:#334155;
-      border:3px solid #475569;border-radius:10px;margin:20px auto;
-      display:flex;align-items:center;justify-content:center;overflow:hidden;
-      will-change:transform;
+    .panel {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
-    .status-connected{color:#4ade80}
-    .status-disconnected{color:#f87171}
-    .mission-phase{
-      background:#1e40af;padding:10px;border-radius:5px;text-align:center;margin:10px 0;
+    h2 { font-size: 15px; margin-bottom: 6px; color: #93c5fd; }
+    #map { width: 100%; height: 100%; border-radius: 10px; }
+    #camera {
+      width: 200px; height: 200px;
+      border-radius: 12px;
+      background: #000;
+      object-fit: cover;
+      border: 2px solid #334155;
+      margin-bottom: 8px;
     }
-    button{
-      background:#3b82f6;color:#fff;border:none;padding:10px 20px;border-radius:5px;
-      cursor:pointer;margin:5px;font-size:14px;transition:background .2s;
+    .telemetry {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+      width: 100%;
+      font-size: 13px;
     }
-    button:hover{background:#2563eb}
+    .telemetry div {
+      background: #334155;
+      border-radius: 6px;
+      padding: 4px 6px;
+      text-align: left;
+    }
+    #time { font-size: 13px; color: #a5b4fc; }
+    footer {
+      text-align: center;
+      font-size: 12px;
+      color: #64748b;
+      letter-spacing: 0.5px;
+    }
   </style>
 </head>
+
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>🚤 ASV KKI 2025 - Monitoring System</h1>
-      <p>Real-time Monitoring untuk Kapal Autonomous</p>
-      <div id="connection-status" class="status-disconnected">🔴 Disconnected</div>
-    </div>
+  <header>
+     Aquanova  -  MHP
+    <div id="status"><span></span><div id="status-text">Connecting...</div></div>
+  </header>
 
-    <div class="dashboard">
-      <div class="panel">
-        <h2>📊 Telemetry Data</h2>
-        <div class="telemetry-grid" id="telemetry-grid">
-          <div class="telemetry-item"><div>Posisi</div><div class="telemetry-value" id="position">-</div></div>
-          <div class="telemetry-item"><div>SOG</div><div class="telemetry-value" id="sog">- knot</div></div>
-          <div class="telemetry-item"><div>COG</div><div class="telemetry-value" id="cog">-°</div></div>
-          <div class="telemetry-item"><div>Baterai</div><div class="telemetry-value" id="battery">- %</div></div>
-        </div>
-        <div class="mission-phase" id="mission-phase">Menunggu data...</div>
-      </div>
-
-      <div class="panel">
-        <h2>🎯 Mission Control</h2>
-        <div id="mission-progress">
-          <div>🟢 Preparation</div>
-          <div>⚪ Reading Ball Set 1-10</div>
-          <div>⚪ Surface Imaging</div>
-          <div>⚪ Underwater Imaging</div>
-          <div>⚪ Finish</div>
-        </div>
-      </div>
+  <div class="main">
+    <div class="panel">
+      <h2>Realtime Map Tracking</h2>
+      <div id="map"></div>
     </div>
 
     <div class="panel">
-      <h2>📷 Surface Camera Feed</h2>
-      <div class="camera-feed">
-        <div class="camera-box">
-          <div class="camera-image" id="surface-image">No image</div>
-          <div>Status: <span id="surface-status">Waiting...</span></div>
-        </div>
-      </div>
-    </div>
+      <h2>Interface Camera</h2>
+      <img id="camera" src="" alt="Camera Stream" />
+      <div id="time">Time: -</div>
 
-    <div class="panel">
-      <h2>🔧 Development Tools</h2>
-      <button onclick="simulateData()">🎮 Simulate ASV Data</button>
-      <button onclick="startWebcam()">📷 Start Webcam Test</button>
-      <button onclick="resetData()">🔄 Reset</button>
+      <h2 style="margin-top: 8px;">Telemetry</h2>
+      <div class="telemetry">
+        <div>Lat: <span id="lat">-</span></div>
+        <div>Lng: <span id="lng">-</span></div>
+        <div>SOG: <span id="sog">-</span></div>
+        <div>COG: <span id="cog">-</span></div>
+        <div>Battery: <span id="battery">-</span></div>
+        <div>Mission: <span id="mission">-</span></div>
+      </div>
     </div>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <footer>ASV Compact Dashboard — Realtime Telemetry & GPS Tracking</footer>
+
   <script>
     const socket = io();
-    let currentTeamId = 'DEV_TEAM_001';
-    let simulationInterval = null;
-    let lastImageUpdate = 0;
 
-    socket.on('connect', () => {
-      document.getElementById('connection-status').textContent = '🟢 Connected';
-      document.getElementById('connection-status').className = 'status-connected';
+    // === CONNECTION STATUS INDICATOR ===
+    const statusDot = document.querySelector("#status span");
+    const statusText = document.getElementById("status-text");
+
+    socket.on("connect", () => {
+      statusDot.style.background = "#22c55e"; // green
+      statusText.textContent = "Connected";
     });
 
-    socket.on('disconnect', () => {
-      document.getElementById('connection-status').textContent = '🔴 Disconnected';
-      document.getElementById('connection-status').className = 'status-disconnected';
+    socket.on("disconnect", () => {
+      statusDot.style.background = "#ef4444"; // red
+      statusText.textContent = "Disconnected";
     });
 
-    socket.on('real-time-update', updateTelemetry);
-    socket.on(`team-${currentTeamId}-image`, displayImage);
+    // === MAP ===
+    const map = L.map("map").setView([-6.2, 106.8], 15);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+    const marker = L.marker([-6.2, 106.8]).addTo(map);
+    const path = L.polyline([], { color: "cyan", weight: 3 }).addTo(map);
+    let coords = [];
 
-    function updateTelemetry(data) {
-      if (data.position)
-        document.getElementById('position').textContent = `${data.position.lat.toFixed(6)}, ${data.position.lng.toFixed(6)}`;
-      if (data.sog)
-        document.getElementById('sog').textContent = `${data.sog} knot (${(data.sog * 1.852).toFixed(2)} km/h)`;
-      if (data.cog)
-        document.getElementById('cog').textContent = `${data.cog}°`;
-      if (data.battery)
-        document.getElementById('battery').textContent = `${data.battery}%`;
-      if (data.missionPhase)
-        document.getElementById('mission-phase').textContent = `🎯 Mission Phase: ${data.missionPhase}`;
+    // === TELEMETRY ===
+    socket.on("real-time-update", data => {
+      if (!data || !data.position) return;
+      const { lat, lng } = data.position;
+      document.getElementById("lat").textContent = lat.toFixed(6);
+      document.getElementById("lng").textContent = lng.toFixed(6);
+      document.getElementById("sog").textContent = data.sog + " knot";
+      document.getElementById("cog").textContent = data.cog + "°";
+      document.getElementById("battery").textContent = data.battery + "%";
+      document.getElementById("mission").textContent = data.mission || "-";
+
+      const now = new Date();
+      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const formatted = `${days[now.getDay()]} ${now.toLocaleDateString("en-GB")} ${now.toLocaleTimeString()}`;
+      document.getElementById("time").textContent = "Time: " + formatted;
+
+      marker.setLatLng([lat, lng]);
+      coords.push([lat, lng]);
+      path.setLatLngs(coords);
+      map.panTo([lat, lng]);
+    });
+
+    // === CAMERA ===
+    const TEAM_ID = "TEAM_ASV_01";
+
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      console.log("📷 Kamera aktif (localhost)");
+
+      const video = document.createElement("video");
+      video.autoplay = true;
+      video.style.display = "none";
+      document.body.appendChild(video);
+
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          video.srcObject = stream;
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+
+          setInterval(() => {
+            if (video.videoWidth > 0) {
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
+              ctx.drawImage(video, 0, 0);
+              const imageData = canvas.toDataURL("image/jpeg", 0.4);
+              socket.emit("image-stream", { teamId: TEAM_ID, image: imageData });
+            }
+          }, 150);
+        })
+        .catch(err => console.error("🚫 Gagal akses kamera:", err));
+    } else {
+      console.log("🟢 Viewer mode: kamera tidak dikirim (device lain)");
     }
 
-    function displayImage(imageData) {
-      const now = performance.now();
-      if (now - lastImageUpdate < 150) return; // batasi update ke 6-7fps
-      lastImageUpdate = now;
-
-      requestAnimationFrame(() => {
-        const imageUrl = `data:image/jpeg;base64,${imageData.imageData}`;
-        const container = document.getElementById(`${imageData.cameraType}-image`);
-        let imgElement = document.getElementById(`${imageData.cameraType}-img`);
-
-        if (!imgElement) {
-          imgElement = document.createElement('img');
-          imgElement.id = `${imageData.cameraType}-img`;
-          imgElement.style.maxWidth = '100%';
-          imgElement.style.maxHeight = '100%';
-          imgElement.style.objectFit = 'cover';
-          imgElement.style.borderRadius = '10px';
-          container.innerHTML = '';
-          container.appendChild(imgElement);
-        }
-        imgElement.src = imageUrl;
-        document.getElementById(`${imageData.cameraType}-status`).textContent =
-          `✅ ${new Date().toLocaleTimeString()}`;
-      });
-    }
-
-    function simulateData() {
-      clearInterval(simulationInterval);
-      simulationInterval = setInterval(() => {
-        const simulatedData = {
-          teamId: currentTeamId,
-          timestamp: new Date().toISOString(),
-          position: { lat: -6.2 + (Math.random() - 0.5) * 0.01, lng: 106.8 + (Math.random() - 0.5) * 0.01 },
-          sog: 2 + Math.random() * 3,
-          cog: Math.random() * 360,
-          battery: 80 + Math.random() * 20,
-          missionPhase: ['Preparation','Navigation','Surface Imaging','Underwater Imaging','Finish'][Math.floor(Math.random() * 5)]
-        };
-        socket.emit('telemetry-data', simulatedData);
-      }, 2000);
-      console.log('Simulation started.');
-    }
-
-    function startWebcam() {
-      navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        video.play();
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-
-        window.captureInterval = setInterval(() => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0);
-          const base64Data = canvas.toDataURL('image/jpeg', 0.5).split(',')[1]; // lebih ringan 50%
-          socket.emit('image-stream', {
-            teamId: currentTeamId,
-            cameraType: 'surface',
-            imageData: base64Data,
-            timestamp: new Date().toISOString(),
-            missionPhase: 'Surface Imaging Test'
-          });
-        }, 250); // sekitar 4fps cukup untuk monitoring
-      }).catch(err => console.error('Error accessing webcam:', err));
-    }
-
-    function resetData() {
-      clearInterval(simulationInterval);
-      clearInterval(window.captureInterval);
-      document.getElementById('position').textContent = '-';
-      document.getElementById('sog').textContent = '- knot';
-      document.getElementById('cog').textContent = '-°';
-      document.getElementById('battery').textContent = '- %';
-      document.getElementById('mission-phase').textContent = 'Menunggu data...';
-      document.getElementById('surface-image').innerHTML = 'No image';
-      document.getElementById('surface-status').textContent = 'Waiting...';
-    }
+    socket.on(`team-${TEAM_ID}-image`, data => {
+      if (data && data.image) {
+        document.getElementById("camera").src = data.image;
+      }
+    });
   </script>
 </body>
 </html>
