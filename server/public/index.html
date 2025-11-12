@@ -1,216 +1,185 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Aquanova - Compact Fullscreen</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aquanova - Compact Fullscreen</title>
 
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Socket.io -->
-  <script src="/socket.io/socket.io.js"></script>
+<!-- Socket.io -->
+<script src="/socket.io/socket.io.js"></script>
 
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", sans-serif; color: #e2e8f0; }
-    body {
-      background: #0f172a;
-      overflow: hidden;
-      height: 100vh;
-      display: grid;
-      grid-template-rows: 60px 1fr 25px;
-      grid-gap: 6px;
-    }
-    header {
-      background: #1e293b;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
-      font-weight: bold;
-      color: #93c5fd;
-      position: relative;
-    }
-    #status {
-      position: absolute;
-      right: 15px;
-      top: 18px;
-      font-size: 13px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    #status span {
-      display: inline-block;
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: gray;
-    }
-    .main {
-      display: grid;
-      grid-template-columns: 1.3fr 0.7fr;
-      gap: 10px;
-      padding: 10px;
-    }
-    .panel {
-      background: #1e293b;
-      border-radius: 12px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    h2 { font-size: 15px; margin-bottom: 6px; color: #93c5fd; }
-    #map { width: 100%; height: 100%; border-radius: 10px; }
-    #camera {
-      width: 200px; height: 200px;
-      border-radius: 12px;
-      background: #000;
-      object-fit: cover;
-      border: 2px solid #334155;
-      margin-bottom: 8px;
-    }
-    .telemetry {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 6px;
-      width: 100%;
-      font-size: 13px;
-    }
-    .telemetry div {
-      background: #334155;
-      border-radius: 6px;
-      padding: 4px 6px;
-      text-align: left;
-    }
-    #time { font-size: 13px; color: #a5b4fc; }
-    footer {
-      text-align: center;
-      font-size: 12px;
-      color: #64748b;
-      letter-spacing: 0.5px;
-    }
-  </style>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", sans-serif; color: #e2e8f0; }
+body { background: #0f172a; overflow: hidden; height: 100vh; display: grid; grid-template-rows: 60px 1fr 25px; grid-gap: 6px; }
+header { background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; color: #93c5fd; position: relative; }
+#status { position: absolute; right: 15px; top: 18px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+#status span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: gray; }
+
+.main { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 10px; padding: 10px; }
+.panel { background: #1e293b; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; align-items: center; }
+h2 { font-size: 15px; margin-bottom: 6px; color: #93c5fd; }
+#map { width: 100%; height: 100%; border-radius: 10px; }
+
+.camera-container { position: relative; width: 350px; height: 205px; margin-bottom: 8px; }
+#camera { width: 100%; height: 100%; border-radius: 12px; background: #000; object-fit: cover; border: 2px solid #334155; }
+
+#time { font-size: 13px; color: #a5b4fc; }
+.telemetry { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; width: 100%; font-size: 13px; }
+.telemetry div { background: linear-gradient(135deg, #334155, #1e293b); border-radius: 6px; padding: 6px 8px; text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: 0.3s; }
+.telemetry div:hover { transform: scale(1.02); background: linear-gradient(135deg, #3b82f6, #1e293b); }
+.telemetry span { color: #facc15; font-weight: 600; float: right; }
+
+.position-log { width: 100%; margin-top: 12px; background: #273549; border-radius: 10px; padding: 10px; position: relative; box-shadow: inset 0 0 6px #1e293b; }
+.position-log h2 { text-align: center; margin-bottom: 8px; color: #60a5fa; font-size: 15px; }
+.timeline { position: relative; margin-left: 15px; padding-left: 15px; border-left: 2px solid #334155; }
+.log-item { position: relative; display: flex; align-items: center; margin-bottom: 10px; transition: all 0.3s ease; }
+.log-item:last-child { margin-bottom: 0; }
+.log-item .dot { width: 10px; height: 10px; border-radius: 50%; background: gray; margin-right: 8px; position: absolute; left: -20px; transition: all 0.3s ease; }
+.log-item.active .dot { background: #22c55e; box-shadow: 0 0 8px #22c55e; animation: pulse-green 1.5s infinite; }
+.log-item span { font-size: 13px; color: #cbd5e1; transition: color 0.3s; }
+.log-item.active span { color: #22c55e; font-weight: 600; }
+@keyframes pulse-green {
+  0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); }
+  70% { box-shadow: 0 0 0 10px rgba(34,197,94,0); }
+  100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+}
+footer { text-align: center; font-size: 12px; color: #64748b; letter-spacing: 0.5px; }
+</style>
 </head>
 
 <body>
-  <header>
-     Aquanova  -  MHP
-    <div id="status"><span></span><div id="status-text">Connecting...</div></div>
-  </header>
+<header>
+  Aquanova - MarineHyProjects
+  <div id="status">
+    <span></span>
+    <div id="status-text">Connecting...</div>
+  </div>
+</header>
 
-  <div class="main">
-    <div class="panel">
-      <h2>Realtime Map Tracking</h2>
-      <div id="map"></div>
+<div class="main">
+  <div class="panel">
+    <h2>Realtime Map Tracking</h2>
+    <div id="map"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Interface Camera</h2>
+    <div class="camera-container">
+      <img id="camera" src="" alt="Camera Stream" />
+    </div>
+    <div id="time">Time: -</div>
+
+    <h2 style="margin-top: 8px;">Telemetry</h2>
+    <div class="telemetry">
+      <div>Lat: <span id="lat">-</span></div>
+      <div>Long: <span id="lng">-</span></div>
+      <div>SOG: <span id="sog">-</span></div>
+      <div>COG: <span id="cog">-</span></div>
+      <div>Battery: <span id="battery">-</span></div>
+      <div>Mission: <span id="mission">-</span></div>
     </div>
 
-    <div class="panel">
-      <h2>Interface Camera</h2>
-      <img id="camera" src="" alt="Camera Stream" />
-      <div id="time">Time: -</div>
-
-      <h2 style="margin-top: 8px;">Telemetry</h2>
-      <div class="telemetry">
-        <div>Lat: <span id="lat">-</span></div>
-        <div>Lng: <span id="lng">-</span></div>
-        <div>SOG: <span id="sog">-</span></div>
-        <div>COG: <span id="cog">-</span></div>
-        <div>Battery: <span id="battery">-</span></div>
-        <div>Mission: <span id="mission">-</span></div>
+    <div class="position-log">
+      <h2>Progress Position</h2>
+      <div class="timeline">
+        <div class="log-item" id="prep"><div class="dot"></div><span>Preparation</span></div>
+        <div class="log-item" id="start"><div class="dot"></div><span>Start</span></div>
+        <div class="log-item" id="float"><div class="dot"></div><span>Floating Ball 1–10</span></div>
+        <div class="log-item" id="surface"><div class="dot"></div><span>Mission Surface Imaging</span></div>
+        <div class="log-item" id="underwater"><div class="dot"></div><span>Mission Underwater Imaging</span></div>
+        <div class="log-item" id="finish"><div class="dot"></div><span>Finish</span></div>
       </div>
     </div>
   </div>
+</div>
 
-  <footer>ASV Compact Dashboard — Realtime Telemetry & GPS Tracking</footer>
+<footer>Aquanova Dashboard — Realtime Telemetry & GPS Tracking</footer>
 
-  <script>
-    const socket = io();
+<script>
+const socket = io();
 
-    // === CONNECTION STATUS INDICATOR ===
-    const statusDot = document.querySelector("#status span");
-    const statusText = document.getElementById("status-text");
+// Connection status
+const statusDot = document.querySelector("#status span");
+const statusText = document.getElementById("status-text");
+socket.on("connect", () => { statusDot.style.background = "#22c55e"; statusText.textContent = "Connected"; });
+socket.on("disconnect", () => { statusDot.style.background = "#ef4444"; statusText.textContent = "Disconnected"; });
 
-    socket.on("connect", () => {
-      statusDot.style.background = "#22c55e"; // green
-      statusText.textContent = "Connected";
-    });
+// Map setup
+const map = L.map("map").setView([-6.2, 106.8], 15);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
+const marker = L.marker([-6.2, 106.8]).addTo(map);
+const path = L.polyline([], { color: "cyan", weight: 3 }).addTo(map);
+let coords = [];
 
-    socket.on("disconnect", () => {
-      statusDot.style.background = "#ef4444"; // red
-      statusText.textContent = "Disconnected";
-    });
+// --- Progress Position Logic ---
+let currentStep = "prep";
+let lastLat = null, lastLng = null;
+let redDetected = false, greenDetected = false;
 
-    // === MAP ===
-    const map = L.map("map").setView([-6.2, 106.8], 15);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap contributors"
-    }).addTo(map);
-    const marker = L.marker([-6.2, 106.8]).addTo(map);
-    const path = L.polyline([], { color: "cyan", weight: 3 }).addTo(map);
-    let coords = [];
+function setActiveLog(id){
+  document.querySelectorAll(".log-item").forEach(item => item.classList.remove("active"));
+  const activeItem = document.getElementById(id);
+  if(activeItem) activeItem.classList.add("active");
+  currentStep = id;
+}
 
-    // === TELEMETRY ===
-    socket.on("real-time-update", data => {
-      if (!data || !data.position) return;
-      const { lat, lng } = data.position;
-      document.getElementById("lat").textContent = lat.toFixed(6);
-      document.getElementById("lng").textContent = lng.toFixed(6);
-      document.getElementById("sog").textContent = data.sog + " knot";
-      document.getElementById("cog").textContent = data.cog + "°";
-      document.getElementById("battery").textContent = data.battery + "%";
-      document.getElementById("mission").textContent = data.mission || "-";
+// Initial state
+setActiveLog("prep");
 
-      const now = new Date();
-      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const formatted = `${days[now.getDay()]} ${now.toLocaleDateString("en-GB")} ${now.toLocaleTimeString()}`;
-      document.getElementById("time").textContent = "Time: " + formatted;
+// Telemetry update (GPS)
+socket.on("real-time-update", function(data){
+  if(data && data.position){
+    const lat = data.position.lat;
+    const lng = data.position.lng;
+    document.getElementById("lat").textContent = lat.toFixed(6);
+    document.getElementById("lng").textContent = lng.toFixed(6);
+    document.getElementById("sog").textContent = data.sog+" knot";
+    document.getElementById("cog").textContent = data.cog+"°";
+    document.getElementById("battery").textContent = data.battery+"%";
+    document.getElementById("mission").textContent = data.mission||"-";
 
-      marker.setLatLng([lat, lng]);
-      coords.push([lat, lng]);
-      path.setLatLngs(coords);
-      map.panTo([lat, lng]);
-    });
+    marker.setLatLng([lat,lng]);
+    coords.push([lat,lng]);
+    path.setLatLngs(coords);
+    map.panTo([lat,lng]);
 
-    // === CAMERA ===
-    const TEAM_ID = "TEAM_ASV_01";
-
-    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-      console.log("📷 Kamera aktif (localhost)");
-
-      const video = document.createElement("video");
-      video.autoplay = true;
-      video.style.display = "none";
-      document.body.appendChild(video);
-
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-          video.srcObject = stream;
-          const canvas = document.createElement("canvas");
-          const ctx = canvas.getContext("2d");
-
-          setInterval(() => {
-            if (video.videoWidth > 0) {
-              canvas.width = video.videoWidth;
-              canvas.height = video.videoHeight;
-              ctx.drawImage(video, 0, 0);
-              const imageData = canvas.toDataURL("image/jpeg", 0.4);
-              socket.emit("image-stream", { teamId: TEAM_ID, image: imageData });
-            }
-          }, 150);
-        })
-        .catch(err => console.error("🚫 Gagal akses kamera:", err));
-    } else {
-      console.log("🟢 Viewer mode: kamera tidak dikirim (device lain)");
+    // --- Detect movement to Start ---
+    if(lastLat !== null && lastLng !== null){
+      const moved = Math.abs(lat - lastLat) > 0.00001 || Math.abs(lng - lastLng) > 0.00001;
+      if(moved && currentStep === "prep") setActiveLog("start");
     }
+    lastLat = lat; lastLng = lng;
 
-    socket.on(`team-${TEAM_ID}-image`, data => {
-      if (data && data.image) {
-        document.getElementById("camera").src = data.image;
-      }
-    });
-  </script>
+    // --- Mission Progress ---
+    if(data.mission === "surface" && currentStep !== "surface") setActiveLog("surface");
+    if(data.mission === "underwater" && currentStep !== "underwater") setActiveLog("underwater");
+    if(data.mission === "finish" && currentStep !== "finish") setActiveLog("finish");
+  }
+
+  if(data && data.geotime){
+    document.getElementById("time").textContent = "Time: "+data.geotime;
+  }
+});
+
+// Object detection (camera)
+socket.on("object-detected", (obj) => {
+  redDetected = obj.redDetected;
+  greenDetected = obj.greenDetected;
+  if(redDetected && greenDetected && currentStep === "start"){
+    setActiveLog("float");
+  }
+});
+
+// GEO-TIME update
+socket.on("time-update", (data) => {
+  if(data && data.geotime){
+    document.getElementById("time").textContent = "Time: "+data.geotime;
+  }
+});
+</script>
 </body>
 </html>

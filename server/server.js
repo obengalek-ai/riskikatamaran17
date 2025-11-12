@@ -24,7 +24,6 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // === Global Data ===
 const teams = new Map();
-const lastFrameTime = {};
 let dummyBattery = 100;
 let connectedClients = 0;
 let batteryInterval = null;
@@ -46,26 +45,49 @@ function stopBatteryDrain() {
   }
 }
 
-// === Serial Port Setup ===
-// Ganti path sesuai perangkat kamu:
-// Raspberry Pi biasanya: "/dev/ttyUSB0"
-const port = new SerialPort({ path: "COM3", baudRate: 9600 });
-const parser = port.pipe(new ReadlineParser({ delimiter: "\n" }));
+// =========================================================
+//                SERIAL SETUP (AKTIF SAAT KAMERA READY)
+// =========================================================
+let port, parser;
 
-port.on("open", () => console.log("✅ Serial connected"));
-port.on("error", (err) => console.error("❌ Serial Error:", err));
+function connectArduino() {
+  if (port && port.isOpen) {
+    console.log("ℹ️ Port sudah terbuka, abaikan koneksi ulang.");
+    return;
+  }
+
+  port = new SerialPort({ path: "COM3", baudRate: 9600 });
+  parser = port.pipe(new ReadlineParser({ delimiter: "\n" }));
+
+  port.on("open", () => console.log("✅ Serial connected"));
+  port.on("error", (err) => console.error("❌ Serial Error:", err));
+
+  parser.on("data", handleSerialData);
+}
 
 // === Parsing Data GPS dari Arduino ===
-// Format contoh: LAT:-6.129765,LON:106.834950,SOG:2.53,COG:87.41
-parser.on("data", (line) => {
+function handleSerialData(line) {
   const clean = line.trim();
   if (!clean) return;
+
   console.log("📥 Serial:", clean);
 
+  // Deteksi format GPS: LAT, LON, SOG, COG
   const regex =
     /LAT\s*:\s*([-+]?\d*\.?\d+),\s*LON\s*:\s*([-+]?\d*\.?\d+),\s*SOG\s*:\s*([-+]?\d*\.?\d+),\s*COG\s*:\s*([-+]?\d*\.?\d+)/i;
   const match = clean.match(regex);
-  if (!match) return console.log("⚠️ Format salah:", clean);
+  if (!match) return;
+
+  const now = new Date();
+  const formattedTime = now.toLocaleString("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 
   const telemetry = {
     teamId: "TEAM_ASV_01",
@@ -73,16 +95,32 @@ parser.on("data", (line) => {
     sog: parseFloat(match[3]),
     cog: parseFloat(match[4]),
     battery: dummyBattery.toFixed(1),
-    mission: "Navigation",
-    geotime: new Date().toISOString(),
+    mission: "14,8V",
+    geotime: formattedTime,
   };
 
   teams.set(telemetry.teamId, telemetry);
   io.emit("real-time-update", telemetry);
-  console.log("📡 Data terkirim:", telemetry);
-});
+}
 
-// === Socket.IO ===
+// === Kirim waktu realtime tiap detik walau tanpa GPS ===
+setInterval(() => {
+  const now = new Date();
+  const formattedTime = now.toLocaleString("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  io.emit("time-update", { geotime: formattedTime });
+}, 1000);
+
+// =========================================================
+//                        SOCKET.IO
+// =========================================================
 io.on("connection", (socket) => {
   connectedClients++;
   const clientIP = socket.handshake.address.replace("::ffff:", "");
@@ -95,33 +133,40 @@ io.on("connection", (socket) => {
 
   if (connectedClients === 1) startBatteryDrain();
 
-  // === TERIMA STREAM GAMBAR DARI LOKALHOST SAJA ===
-  socket.on("image-stream", (data) => {
-    const now = Date.now();
-    const teamId = data.teamId || "TEAM_ASV_01";
+  // === Trigger dari Python YOLO: aktifkan koneksi Arduino ===
+  socket.on("camera_ready", () => {
+    console.log("🎥 Kamera siap, mengaktifkan koneksi Arduino...");
+    connectArduino();
+  });
 
-    // Hanya izinkan dari device lokal
-    if (clientIP !== "127.0.0.1" && clientIP !== "::1") {
-      console.log(`🚫 Stream dari IP ${clientIP} ditolak (bukan localhost)`);
-      return;
-    }
+  // === Perintah dari deteksi (rudder-center) ===
+  socket.on("rudder-center", (data) => {
+    if (!data || typeof data.center === "undefined" || !port) return;
 
-    if (!data.image) return;
-    if (!lastFrameTime[teamId] || now - lastFrameTime[teamId] > 80) {
-      io.emit(`team-${teamId}-image`, data);
-      lastFrameTime[teamId] = now;
-      console.log(`📸 Frame diterima dari ${teamId} (${data.image.length} bytes)`);
-    }
+    const cmd = `CENTER:${data.center}\n`;
+    console.log("➡️ Kirim ke Arduino:", cmd.trim());
+    port.write(cmd);
+  });
+
+  // === Perintah manual dari dashboard ===
+  socket.on("rudder-command", (data) => {
+    if (!data || !data.rudder || !port) return;
+
+    const cmd = `RUDDER:${data.rudder}\n`;
+    console.log("➡️ Manual ke Arduino:", cmd.trim());
+    port.write(cmd);
   });
 
   socket.on("disconnect", () => {
     connectedClients--;
-    console.log(`❌ Client disconnected (${clientIP}) — ${connectedClients} left`);
     stopBatteryDrain();
+    console.log(`❌ Client disconnected (${clientIP})`);
   });
 });
 
-// === ROUTES ===
+// =========================================================
+//                        ROUTES
+// =========================================================
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
@@ -130,9 +175,10 @@ app.get("/api/teams", (req, res) => {
   res.json(Array.from(teams.entries()));
 });
 
-// === Start Server ===
+// =========================================================
+//                        START SERVER
+// =========================================================
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🌐 Dashboard: http://localhost:${PORT}`);
 });
